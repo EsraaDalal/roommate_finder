@@ -1,0 +1,596 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+
+import '../../../../core/resources/app_spacing.dart';
+import '../../../../core/widgets/section_label.dart';
+import '../../../applications/data/mock_users.dart';
+import '../../../discovery/data/listing.dart';
+import '../../../discovery/data/listings_store.dart';
+import '../../domain/entities/listing_entity.dart';
+
+
+/// Create and Edit listing form.
+///
+/// `ai/design/add_listing_page.png` covers the top of the form (photos, title,
+/// description, price, location, room type, furnishing). The remaining fields
+/// required by the project specification continue below.
+///
+/// Passing [listing] switches the same form into edit mode with the current
+/// values prefilled; submitting updates that listing instead of creating a
+/// duplicate. Cancelling pops without touching stored data.
+class CreateListingPage extends StatefulWidget {
+  const CreateListingPage({super.key, this.listing});
+
+  /// The listing being edited, or null when creating a new one.
+  final ListingEntity? listing;
+
+  @override
+  State<CreateListingPage> createState() => _CreateListingPageState();
+}
+
+class _CreateListingPageState extends State<CreateListingPage> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+
+  late final TextEditingController _titleController;
+  late final TextEditingController _descriptionController;
+  late final TextEditingController _priceController;
+  late final TextEditingController _areaController;
+  late final TextEditingController _peopleController;
+  late final TextEditingController _spacesController;
+  late final TextEditingController _rulesController;
+  late final TextEditingController _roommateNameController;
+  late final TextEditingController _roommateNoteController;
+  late final TextEditingController _hostNameController;
+  late final TextEditingController _hostNoteController;
+
+  late RoomType _roomType;
+  late bool _furnished;
+final ImagePicker _imagePicker = ImagePicker();
+
+final List<XFile> _selectedImages = <XFile>[];
+
+bool _isPickingImages = false;
+
+static const int _maxPhotos = 6;
+
+  bool get _isEditing => widget.listing != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final ListingEntity? existing = widget.listing;
+
+    _titleController = TextEditingController(text: existing?.title ?? '');
+    _descriptionController =
+        TextEditingController(text: existing?.description ?? '');
+    _priceController = TextEditingController(
+      text: existing == null ? '' : '${existing.priceMonthly}',
+    );
+    _areaController = TextEditingController(text: existing?.area ?? '');
+    _peopleController = TextEditingController(
+      text: existing == null ? '' : '${existing.peopleCount}',
+    );
+    _spacesController = TextEditingController(
+      text: existing == null ? '' : '${existing.spacesRemaining}',
+    );
+    _rulesController =
+        TextEditingController(text: existing?.rules.join('\n') ?? '');
+
+    final Roommate? roommate =
+        (existing?.roommates.isNotEmpty ?? false) ? existing!.roommates.first : null;
+    _roommateNameController =
+        TextEditingController(text: roommate?.name ?? '');
+    _roommateNoteController =
+        TextEditingController(text: roommate?.tagline ?? '');
+
+    _hostNameController =
+        TextEditingController(text: existing?.host.name ?? '');
+    _hostNoteController =
+        TextEditingController(text: existing?.host.responseTime ?? '');
+
+    _roomType = existing?.roomType ?? RoomType.apartment;
+    _furnished = existing?.furnished ?? true;
+   
+  }
+  Future<void> _pickImages() async {
+  if (_isPickingImages ||
+      _selectedImages.length >= _maxPhotos) {
+    return;
+  }
+
+  setState(() => _isPickingImages = true);
+
+  try {
+    final List<XFile> images =
+        await _imagePicker.pickMultiImage(
+      imageQuality: 85,
+    );
+
+    if (!mounted || images.isEmpty) return;
+
+    setState(() {
+      final int remaining =
+          _maxPhotos - _selectedImages.length;
+
+      _selectedImages.addAll(
+        images.take(remaining),
+      );
+    });
+  } catch (e) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Could not select images. Please try again.'),
+      ),
+    );
+  } finally {
+    if (mounted) {
+      setState(() => _isPickingImages = false);
+    }
+  }
+}
+
+void _removeImage(int index) {
+  setState(() {
+    _selectedImages.removeAt(index);
+  });
+}
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    _priceController.dispose();
+    _areaController.dispose();
+    _peopleController.dispose();
+    _spacesController.dispose();
+    _rulesController.dispose();
+    _roommateNameController.dispose();
+    _roommateNoteController.dispose();
+    _hostNameController.dispose();
+    _hostNoteController.dispose();
+    super.dispose();
+  }
+
+  String? _validateRequired(String? value, String message) {
+    return (value == null || value.trim().isEmpty) ? message : null;
+  }
+
+  String? _validateNumber(String? value, String message, {int min = 0}) {
+    final String raw = value?.trim() ?? '';
+    if (raw.isEmpty) {
+      return message;
+    }
+    final int? parsed = int.tryParse(raw);
+    if (parsed == null) {
+      return 'Enter a whole number';
+    }
+    if (parsed < min) {
+      return 'Must be at least $min';
+    }
+    return null;
+  }
+
+  void _submit() {
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      return;
+    }
+
+    final ListingEntity? existing = widget.listing;
+    final String roommateName = _roommateNameController.text.trim();
+    final String hostName =
+        _hostNameController.text.trim().isEmpty
+            ? 'Alex Morgan'
+            : _hostNameController.text.trim();
+
+    final Listing listing = Listing(
+      id: existing?.id ?? ListingsStore.newId(),
+      title: _titleController.text.trim(),
+      description: _descriptionController.text.trim(),
+      priceMonthly: int.parse(_priceController.text.trim()),
+      area: _areaController.text.trim(),
+      roomType: _roomType,
+      category: _roomType == RoomType.universityRoom
+          ? ListingCategory.university
+          : ListingCategory.apartment,
+      furnished: _furnished,
+      peopleCount: int.parse(_peopleController.text.trim()),
+      spacesRemaining: int.parse(_spacesController.text.trim()),
+      rules: _rulesController.text
+          .split('\n')
+          .map((String rule) => rule.trim())
+          .where((String rule) => rule.isNotEmpty)
+          .toList(growable: false),
+      roommates: roommateName.isEmpty
+          ? const <Roommate>[]
+          : [
+              Roommate(
+                initials: _initialsFor(roommateName),
+                name: roommateName,
+                tagline: _roommateNoteController.text.trim(),
+              ),
+            ],
+      host: ListingHost(
+        initials: _initialsFor(hostName),
+        name: hostName,
+        responseTime: _hostNoteController.text.trim().isEmpty
+            ? 'Usually responds within an hour'
+            : _hostNoteController.text.trim(),
+      ),
+      photoCount: 0,
+      isPublished: existing?.isPublished ?? true,
+      ownerId: existing?.ownerId ?? CurrentUser.id,
+    );
+
+    if (_isEditing) {
+      ListingsStore.instance.update(listing);
+    } else {
+      ListingsStore.instance.add(listing);
+    }
+
+    Navigator.of(context).pop();
+  }
+
+  String _initialsFor(String name) {
+    final List<String> parts =
+        name.split(' ').where((String part) => part.isNotEmpty).toList();
+    if (parts.isEmpty) {
+      return '?';
+    }
+    if (parts.length == 1) {
+      return parts.first.substring(0, 1).toUpperCase();
+    }
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+        .toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          tooltip: 'Back',
+          // Cancelling never modifies stored data.
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Text(_isEditing ? 'Edit listing' : 'Create listing'),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.pageHorizontal,
+            AppSpacing.md,
+            AppSpacing.pageHorizontal,
+            AppSpacing.xl,
+          ),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Share your space', style: theme.textTheme.displayMedium),
+                const SizedBox(height: AppSpacing.xxs),
+                Text(
+                  'Add the essentials. You can edit them anytime.',
+                  style: theme.textTheme.bodyMedium,
+                ),
+                const SizedBox(height: AppSpacing.lg),
+              Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        'Photos (${_selectedImages.length}/$_maxPhotos)',
+      ),
+      const SizedBox(height: 12),
+      Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          for (int i = 0; i < _selectedImages.length; i++)
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.file(
+                    File(_selectedImages[i].path),
+                    width: 100,
+                    height: 100,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: IconButton(
+                    onPressed: () => _removeImage(i),
+                    icon: const Icon(Icons.close),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          if (_selectedImages.length < _maxPhotos)
+            SizedBox(
+              width: 100,
+              height: 100,
+              child: OutlinedButton(
+                onPressed:
+                    _isPickingImages ? null : _pickImages,
+                child: _isPickingImages
+                    ? const CircularProgressIndicator()
+                    : const Column(
+                        mainAxisAlignment:
+                            MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.add_a_photo_outlined),
+                          SizedBox(height: 4),
+                          Text('Add photos'),
+                        ],
+                      ),
+              ),
+            ),
+        ],
+      ),
+    ],
+  ),
+                const SizedBox(height: AppSpacing.lg),
+                _LabeledField(
+                  label: 'Listing title',
+                  child: TextFormField(
+                    controller: _titleController,
+                    decoration: const InputDecoration(
+                      hintText: 'e.g. Bright room near campus',
+                    ),
+                    validator: (String? v) =>
+                        _validateRequired(v, 'Enter a listing title'),
+                    textInputAction: TextInputAction.next,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _LabeledField(
+                  label: 'Description',
+                  child: TextFormField(
+                    controller: _descriptionController,
+                    minLines: 3,
+                    maxLines: 5,
+                    decoration: const InputDecoration(
+                      hintText: 'What makes this place feel like home?',
+                    ),
+                    validator: (String? v) =>
+                        _validateRequired(v, 'Enter a description'),
+                    textInputAction: TextInputAction.newline,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _LabeledField(
+                        label: 'Monthly price',
+                        child: TextFormField(
+                          controller: _priceController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            hintText: '\$750',
+                          ),
+                          validator: (String? v) => _validateNumber(
+                            v,
+                            'Enter a price',
+                            min: 1,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: _LabeledField(
+                        label: 'Location',
+                        child: TextFormField(
+                          controller: _areaController,
+                          decoration: const InputDecoration(
+                            hintText: 'Area, city',
+                          ),
+                          validator: (String? v) =>
+                              _validateRequired(v, 'Enter a location'),
+                          textInputAction: TextInputAction.next,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _LabeledField(
+                  label: 'Room type',
+                  child: DropdownButtonFormField<RoomType>(
+                    initialValue: _roomType,
+                    decoration: const InputDecoration(),
+                    items: [
+                      for (final RoomType type in RoomType.values)
+                        DropdownMenuItem<RoomType>(
+                          value: type,
+                          child: Text(type.label),
+                        ),
+                    ],
+                    onChanged: (RoomType? value) {
+                      if (value != null) {
+                        setState(() => _roomType = value);
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _LabeledField(
+                  label: 'Furnishing',
+                  child: DropdownButtonFormField<bool>(
+                    initialValue: _furnished,
+                    decoration: const InputDecoration(),
+                    items: const [
+                      DropdownMenuItem<bool>(
+                        value: true,
+                        child: Text('Furnished'),
+                      ),
+                      DropdownMenuItem<bool>(
+                        value: false,
+                        child: Text('Unfurnished'),
+                      ),
+                    ],
+                    onChanged: (bool? value) {
+                      if (value != null) {
+                        setState(() => _furnished = value);
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xl),
+                const SectionLabel('Household'),
+                const SizedBox(height: AppSpacing.sm),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _LabeledField(
+                        label: 'Number of people',
+                        child: TextFormField(
+                          controller: _peopleController,
+                          keyboardType: TextInputType.number,
+                          decoration:
+                              const InputDecoration(hintText: '2'),
+                          validator: (String? v) => _validateNumber(
+                            v,
+                            'Enter how many people live here',
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: _LabeledField(
+                        label: 'Remaining spaces',
+                        child: TextFormField(
+                          controller: _spacesController,
+                          keyboardType: TextInputType.number,
+                          decoration:
+                              const InputDecoration(hintText: '1'),
+                          validator: (String? v) => _validateNumber(
+                            v,
+                            'Enter remaining spaces',
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _LabeledField(
+                  label: 'Housing rules',
+                  helper: 'One rule per line',
+                  child: TextFormField(
+                    controller: _rulesController,
+                    minLines: 2,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      hintText: 'No smoking\nQuiet hours after 10 PM',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _LabeledField(
+                  label: 'Roommate name',
+                  helper: 'Optional',
+                  child: TextFormField(
+                    controller: _roommateNameController,
+                    decoration: const InputDecoration(
+                      hintText: 'Jamie & Drew',
+                    ),
+                    textInputAction: TextInputAction.next,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                _LabeledField(
+                  label: 'Roommate note',
+                  child: TextFormField(
+                    controller: _roommateNoteController,
+                    decoration: const InputDecoration(
+                      hintText: 'Designer and graduate student',
+                    ),
+                    textInputAction: TextInputAction.next,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _LabeledField(
+                  label: 'Host name',
+                  child: TextFormField(
+                    controller: _hostNameController,
+                    decoration: const InputDecoration(
+                      hintText: 'Alex Morgan',
+                    ),
+                    textInputAction: TextInputAction.next,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                _LabeledField(
+                  label: 'Host response note',
+                  child: TextFormField(
+                    controller: _hostNoteController,
+                    decoration: const InputDecoration(
+                      hintText: 'Usually responds within an hour',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xl),
+                FilledButton(
+                  onPressed: _submit,
+                  child: Text(_isEditing ? 'Save changes' : 'Publish listing'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+ 
+}
+
+class _LabeledField extends StatelessWidget {
+  const _LabeledField({
+    required this.label,
+    required this.child,
+    this.helper,
+  });
+
+  final String label;
+  final Widget child;
+  final String? helper;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(label, style: theme.textTheme.labelLarge),
+            if (helper != null) ...[
+              const Spacer(),
+              Text(helper!, style: theme.textTheme.bodySmall),
+            ],
+          ],
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        child,
+      ],
+    );
+  }
+}

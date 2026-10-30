@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "470955033752",
+    "project_id": "myfirstapp-e90da",
+    "storage_bucket": "myfirstapp-e90da.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:470955033752:android:c63b56334b579cbda97ced",
+        "android_client_info": {
+          "package_name": "com.example.rommate_finder"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAziZs2bG7jZFHcf8TOeznFH5V3OepoIys"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

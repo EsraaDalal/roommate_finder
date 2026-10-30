@@ -1,0 +1,468 @@
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../../../core/config/di.dart';
+import '../../../../core/resources/app_spacing.dart';
+import '../../../../core/widgets/section_header.dart';
+
+import '../../../applications/presentation/bloc/application_bloc.dart';
+import '../../../applications/presentation/pages/received_applications_page.dart';
+import '../../../auth/presentation/bloc/auth_session/auth_session_bloc.dart';
+import '../../../auth/presentation/bloc/auth_session/auth_session_state.dart';
+
+import '../../../discovery/presentation/pages/listing_details_page.dart';
+import '../../../discovery/presentation/widgets/listing_card_widgets.dart';
+
+import '../../../../core/domain/entities/listing_entity.dart';
+import '../../../profile/presentation/bloc/profile_bloc.dart';
+import '../../../profile/presentation/bloc/profile_event.dart';
+import '../../../profile/presentation/bloc/profile_state.dart';
+import '../bloc/hosting/hosting_bloc.dart';
+import '../bloc/hosting/hosting_event.dart';
+import '../bloc/hosting/hosting_state.dart';
+import '../bloc/user/users_bloc.dart';
+import '../bloc/user/users_event.dart';
+import 'create_listing_page.dart';
+
+/// My Listings.
+///
+/// Mirrors `ai/design/myListing_page.png`: a green "+" action in the app bar,
+/// the "Your homes" heading, and a row per listing with a status chip, price
+/// line, and Open / Edit / delete actions.
+///
+/// The application count shown in the design is omitted because the
+/// applications feature is not implemented yet.
+class MyListingsPage extends StatefulWidget {
+  const MyListingsPage({super.key, required this.name});
+  final String name;
+
+  @override
+  State<MyListingsPage> createState() => _MyListingsPageState();
+}
+
+class _MyListingsPageState extends State<MyListingsPage> {
+  String? _ownerId;
+
+  void _openCreate(BuildContext context) {
+ 
+
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => MultiBlocProvider(
+          providers: [
+            BlocProvider<HostingBloc>.value(value: context.read<HostingBloc>()),
+         
+            BlocProvider<UsersBloc>(
+              create: (_) => getIt<UsersBloc>()..add(UsersLoadRequested()),
+            ),
+          ],
+          child:  CreateListingPage(name:widget.name,),
+        ),
+      ),
+    );
+  }
+
+  bool _initialLoadRequested = false;
+
+  void _loadMyListingsIfAuthenticated() {
+    final sessionState = context.read<AuthSessionBloc>().state;
+
+    if (sessionState is AuthSessionAuthenticated && !_initialLoadRequested) {
+      _ownerId = sessionState.user.uid;
+      _initialLoadRequested = true;
+
+      context.read<HostingBloc>().add(
+        GetMyListingsEvent(ownerId: sessionState.user.uid),
+      );
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loadMyListingsIfAuthenticated();
+  }
+
+  Future<void> _confirmDelete(
+    BuildContext context,
+    ListingEntity listing,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete listing?'),
+        content: Text('Are you sure you want to delete "${listing.title}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (!context.mounted || confirmed != true) return;
+
+    final ownerId = _ownerId;
+
+    if (ownerId == null || ownerId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to delete this listing.')),
+      );
+      return;
+    }
+
+    context.read<HostingBloc>().add(
+      DeleteListingEvent(listingId: listing.id, ownerId: ownerId),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          tooltip: 'Back',
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: AppSpacing.sm),
+            child: Material(
+              color: Theme.of(context).colorScheme.primary,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              child: InkWell(
+                onTap: () => _openCreate(context),
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                child: const SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: Icon(Icons.add_rounded, color: Colors.white),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.pageHorizontal,
+                  AppSpacing.md,
+                  AppSpacing.pageHorizontal,
+                  AppSpacing.md,
+                ),
+                child: const SectionHeader(
+                  title: 'Your homes',
+                  subtitle: 'Manage published listings and applications.',
+                ),
+              ),
+            ),
+            BlocBuilder<HostingBloc, HostingState>(
+              builder: (context, state) {
+                if (state.status == HostingStatus.loading &&
+                    state.listings.isEmpty) {
+                  return const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+
+                if (state.status == HostingStatus.failure &&
+                    state.listings.isEmpty) {
+                  return SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(
+                          AppSpacing.pageHorizontal,
+                        ),
+                        child: Text(
+                          state.errorMessage ?? 'Unable to load your listings.',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
+                final listings = state.listings;
+
+                if (listings.isEmpty) {
+                  return const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: EmptyResults(
+                      title: 'No listings yet',
+                      message:
+                          'Publish your first space and it will show up here.',
+                    ),
+                  );
+                }
+
+                return SliverList.separated(
+                  itemCount: listings.length,
+                  separatorBuilder: (_, _) =>
+                      const SizedBox(height: AppSpacing.md),
+                  itemBuilder: (context, index) {
+                    final listing = listings[index];
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.pageHorizontal,
+                      ),
+                      child: _OwnedListingTile(
+                        listing: listing,
+                        onOpen: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) =>
+                                  ListingDetailsPage(listing: listing),
+                            ),
+                          );
+                        },
+                        onEdit: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => BlocProvider.value(
+                                value: context.read<HostingBloc>(),
+                                child: CreateListingPage(listing: listing,name: widget.name,),
+                              ),
+                            ),
+                          );
+                        },
+                        onDelete: () {
+                          _confirmDelete(context, listing);
+                        },
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OwnedListingTile extends StatelessWidget {
+  const _OwnedListingTile({
+    required this.listing,
+    required this.onOpen,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final ListingEntity listing;
+  final VoidCallback onOpen;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+
+    return Material(
+      color: theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onOpen,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.sm),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 96,
+                height: 96,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  child:
+                      listing.photoUrls.isNotEmpty &&
+                          listing.photoUrls.first.isNotEmpty
+                      ? Image.network(
+                          listing.photoUrls.first,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) {
+                              return child;
+                            }
+
+                            return const Center(
+                              child: SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) {
+                            return const ListingPhoto(
+                              borderRadius: AppRadius.md,
+                            );
+                          },
+                        )
+                      : const ListingPhoto(borderRadius: AppRadius.md),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    StatusChip(
+                      label: listing.isPublished ? 'Published' : 'Draft',
+                      backgroundColor: listing.isPublished
+                          ? null
+                          : theme.colorScheme.surfaceContainerHighest,
+                      color: listing.isPublished
+                          ? null
+                          : theme.textTheme.bodyMedium?.color,
+                    ),
+                    const SizedBox(height: AppSpacing.xxs),
+                    Text(
+                      listing.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    Text(
+                      '\$${listing.priceMonthly}/month',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    _ApplicationsLink(
+                      listing: listing,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => BlocProvider(
+                            create: (_) => getIt<ApplicationBloc>(),
+                            child: ReceivedApplicationsPage(listing: listing),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Row(
+                      children: [
+                        _TileAction(label: 'Open', onTap: onOpen),
+                        const SizedBox(width: AppSpacing.xs),
+                        _TileAction(label: 'Edit', onTap: onEdit),
+                        const SizedBox(width: AppSpacing.xs),
+                        _TileAction(
+                          icon: Icons.delete_outline_rounded,
+                          onTap: onDelete,
+                          tooltip: 'Delete listing',
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TileAction extends StatelessWidget {
+  const _TileAction({this.label, this.icon, required this.onTap, this.tooltip});
+
+  final String? label;
+  final IconData? icon;
+  final VoidCallback onTap;
+  final String? tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+
+    return Tooltip(
+      message: tooltip ?? label ?? '',
+      child: Material(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: label == null ? AppSpacing.xs : AppSpacing.sm,
+              vertical: 6,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 15, color: theme.textTheme.bodySmall?.color),
+                ] else ...[
+                  Icon(
+                    Icons.edit_outlined,
+                    size: 14,
+                    color: theme.textTheme.bodySmall?.color,
+                  ),
+                  const SizedBox(width: AppSpacing.xxs),
+                  Text(
+                    label!,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ApplicationsLink extends StatelessWidget {
+  const _ApplicationsLink({required this.listing, required this.onTap});
+
+  final ListingEntity listing;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('View applications', style: theme.textTheme.bodySmall),
+              const SizedBox(width: 2),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 16,
+                color: theme.textTheme.bodySmall?.color,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
