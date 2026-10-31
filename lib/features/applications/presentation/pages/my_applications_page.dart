@@ -228,7 +228,7 @@ class _MyApplicationsPageState extends State<MyApplicationsPage> {
                               application: application,
                               listing: listing,
                               subtitle:
-                                  'Move-in: ${formatMoveInDate(application.requestedMoveIn)}',
+                                  'Move-in: ${formatMoveInDate(application.requestedMoveIn)}\nnote : ${application.message}',
                               actions: [
                                 ApplicationActionButton(
                                   label: 'Open listing',

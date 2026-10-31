@@ -253,13 +253,16 @@ class _CreateListingPageState extends State<CreateListingPage> {
 
     final sessionState = context.read<AuthSessionBloc>().state;
     if (sessionState is! AuthSessionAuthenticated) {
+      
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please sign in to manage listings.')),
       );
       return;
     }
 
+
     final String currentUserId = sessionState.user.uid;
+
     final ListingEntity? existing = widget.listing;
     final List<Roommate> roommates = <Roommate>[];
     final UsersState usersState = context.read<UsersBloc>().state;

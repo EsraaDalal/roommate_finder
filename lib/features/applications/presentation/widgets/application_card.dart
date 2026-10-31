@@ -103,21 +103,36 @@ final ListingEntity listing;
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(AppRadius.md),
-                    child: const SizedBox(
-                      width: 84,
-                      height: 84,
-                      child: ColoredBox(
-                        color: Color(0xFFE6F2EC),
-                        child: Icon(
-                          Icons.home_outlined,
-                          size: 26,
-                          color: Color(0xFF477B68),
-                        ),
-                      ),
-                    ),
-                  ),
+                 ClipRRect(
+  borderRadius: BorderRadius.circular(AppRadius.md),
+  child: SizedBox(
+    width: 84,
+    height: 84,
+    child: listing.photoUrls.isNotEmpty
+        ? Image.network(
+            listing.photoUrls.first,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return const ColoredBox(
+                color: Color(0xFFE6F2EC),
+                child: Icon(
+                  Icons.home_outlined,
+                  size: 26,
+                  color: Color(0xFF477B68),
+                ),
+              );
+            },
+          )
+        : const ColoredBox(
+            color: Color(0xFFE6F2EC),
+            child: Icon(
+              Icons.home_outlined,
+              size: 26,
+              color: Color(0xFF477B68),
+            ),
+          ),
+  ),
+),
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Column(
