@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:rommate_finder/core/config/di.dart';
 
 import '../../../../core/resources/app_colors.dart';
 import '../../../../core/resources/app_spacing.dart';
 import '../../../../core/widgets/app_brand_mark.dart';
 import '../../domain/usecases/complete_onboarding_use_case.dart';
+import '../bloc/onboarding/onboarding_bloc.dart';
+import '../bloc/onboarding/onboarding_event.dart';
+import '../bloc/onboarding/onboarding_state.dart';
 import 'login_page.dart';
 
 /// Onboarding slide content, matching the three Figma frames.
@@ -13,7 +17,8 @@ class OnboardingSlide {
     required this.counter,
     required this.title,
     required this.description,
-    required this.imageLabel, required this.imageUrl,
+    required this.imageLabel,
+    required this.imageUrl,
   });
 
   /// e.g. "01 — 03"
@@ -34,7 +39,7 @@ const List<OnboardingSlide> kOnboardingSlides = [
         'Explore welcoming rooms and housing listings in the neighborhoods '
         'you love.',
     imageLabel: 'A place that feels like you',
-    imageUrl:"assets/images/Home, Community, and Cozy Spaces.png",
+    imageUrl: "assets/images/Home, Community, and Cozy Spaces.png",
   ),
   OnboardingSlide(
     counter: '02 — 03',
@@ -43,7 +48,7 @@ const List<OnboardingSlide> kOnboardingSlides = [
         'View housing details and get to know the basics about who already '
         'lives there.',
     imageLabel: 'Live better together',
-     imageUrl:"assets/images/Friends Gathering in a Cozy Green Living Room.png",
+    imageUrl: "assets/images/Friends Gathering in a Cozy Green Living Room.png",
   ),
   OnboardingSlide(
     counter: '03 — 03',
@@ -52,7 +57,7 @@ const List<OnboardingSlide> kOnboardingSlides = [
         'Contact owners directly and send a simple housing application when '
         'you are ready.',
     imageLabel: 'One message away',
-  imageUrl:"assets/images/Home, Community, and Cozy Spaces3.png",
+    imageUrl: "assets/images/Home, Community, and Cozy Spaces3.png",
   ),
 ];
 
@@ -91,76 +96,88 @@ class _OnboardingPageState extends State<OnboardingPage> {
     );
   }
 
+  void _completeOnboarding() {
+    context.read<OnboardingBloc>().add(const OnboardingCompletedRequested());
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isLast = _index == kOnboardingSlides.length - 1;
 
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            _TopBar(onSkip: _goToLogin),
-            Expanded(
-              child: PageView.builder(
-                controller: _pageController,
-                itemCount: kOnboardingSlides.length,
-                onPageChanged: (int value) => setState(() => _index = value),
-                itemBuilder: (BuildContext context, int slideIndex) {
-                  return _OnboardingSlideView(
-                    slide: kOnboardingSlides[slideIndex],
-                  );
-                },
+    return BlocListener<OnboardingBloc, OnboardingState>(
+      listener: (context, state) {
+    if (state is OnboardingCompleted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute<void>(
+          builder: (_) => const LoginPage(),
+        ),
+        (route) => false,
+      );
+    }
+
+    if (state is OnboardingError) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(state.message)),
+      );
+    }
+  },
+      child: Scaffold(
+        body: SafeArea(
+          child: Column(
+            children: [
+              _TopBar(onSkip: _goToLogin),
+              Expanded(
+                child: PageView.builder(
+                  controller: _pageController,
+                  itemCount: kOnboardingSlides.length,
+                  onPageChanged: (int value) => setState(() => _index = value),
+                  itemBuilder: (BuildContext context, int slideIndex) {
+                    return _OnboardingSlideView(
+                      slide: kOnboardingSlides[slideIndex],
+                    );
+                  },
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.pageHorizontal,
-                0,
-                AppSpacing.pageHorizontal,
-                AppSpacing.lg,
-              ),
-              child: Row(
-                children: [
-                  _SlideIndicator(
-                    count: kOnboardingSlides.length,
-                    activeIndex: _index,
-                  ),
-                  const Spacer(),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.pageHorizontal,
+                  0,
+                  AppSpacing.pageHorizontal,
+                  AppSpacing.lg,
+                ),
+                child: Row(
+                  children: [
+                    _SlideIndicator(
+                      count: kOnboardingSlides.length,
+                      activeIndex: _index,
+                    ),
+                    const Spacer(),
                   FilledButton(
-                    onPressed: _onNext,
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size(140, 52),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.lg,
-                      ),
-                      shape: const StadiumBorder(),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        InkWell(
-                          onTap: () async {
-                            if (isLast) {
-                              await getIt<CompleteOnboardingUseCase>()();
-                              Navigator.of(context).pushAndRemoveUntil(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => const LoginPage(),
-                                ),
-                                (route) => false,
-                              );
-                            }
-                          },
-                          child: Text(isLast ? 'Get Started' : 'Next'),
-                        ),
-                        const SizedBox(width: AppSpacing.xs),
-                        const Icon(Icons.arrow_forward_rounded, size: 18),
-                      ],
-                    ),
-                  ),
-                ],
+  onPressed: isLast ? _completeOnboarding : _onNext,
+  style: FilledButton.styleFrom(
+    minimumSize: const Size(140, 52),
+    padding: const EdgeInsets.symmetric(
+      horizontal: AppSpacing.lg,
+    ),
+    shape: const StadiumBorder(),
+  ),
+  child: Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(isLast ? 'Get Started' : 'Next'),
+      const SizedBox(width: AppSpacing.xs),
+      const Icon(
+        Icons.arrow_forward_rounded,
+        size: 18,
+      ),
+    ],
+  ),
+)
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -193,16 +210,7 @@ class _TopBar extends StatelessWidget {
           ),
           const Spacer(),
 
-          TextButton(
-            onPressed: () async {
-              await getIt<CompleteOnboardingUseCase>()();
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute<void>(builder: (_) => const LoginPage()),
-                (route) => false,
-              );
-            },
-            child: const Text('Skip'),
-          ),
+          TextButton(onPressed: () {}, child: const Text('Skip')),
         ],
       ),
     );
@@ -229,7 +237,7 @@ class _OnboardingSlideView extends StatelessWidget {
             aspectRatio: 1.05,
             child: _SlideImage(
               label: slide.imageLabel,
-                 imageUrl: slide.imageUrl,
+              imageUrl: slide.imageUrl,
             ),
           ),
           const SizedBox(height: AppSpacing.xl),
@@ -257,11 +265,7 @@ class _OnboardingSlideView extends StatelessWidget {
 /// asset yet. A tinted placeholder keeps the composition and the overlaid label
 /// pill intact so the real image can be dropped in later.
 class _SlideImage extends StatelessWidget {
-  const _SlideImage({
-    required this.label,
-    
-    required this.imageUrl,
-  });
+  const _SlideImage({required this.label, required this.imageUrl});
 
   final String label;
 
@@ -307,7 +311,6 @@ class _SlideImage extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                   
                     const SizedBox(width: AppSpacing.xs),
                     Text(
                       label,

@@ -141,7 +141,7 @@ Future<String> getOrCreateConversation({
   final encodedSecond = base64Url.encode(
     utf8.encode(participants[1]),
   );
-
+ 
   final conversationId = 'pair_${encodedFirst}_$encodedSecond';
   final reference = _conversationRef(conversationId);
 

@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../features/auth/presentation/bloc/onboarding/onboarding_bloc.dart';
 import '../../features/favorites/data/datasources/favorite_local_datasource.dart';
 import '../../features/favorites/data/models/favorite_model.dart';
 import '../../features/favorites/data/repositories/favorite_repository_impl.dart';
@@ -167,6 +168,14 @@ Future<void> setupDependencies() async {
       getListingByIdUseCase: getIt<GetListingByIdUseCase>(),
     ),
   );
+  getIt.registerFactory<OnboardingBloc>(
+  () => OnboardingBloc(
+    isOnboardingCompletedUseCase:
+        getIt<IsOnboardingCompletedUseCase>(),
+    completeOnboardingUseCase:
+        getIt<CompleteOnboardingUseCase>(),
+  ),
+);
 
   if (SupabaseConfig.isConfigured) {
     getIt.registerLazySingleton<SupabaseClient>(() => Supabase.instance.client);

@@ -8,6 +8,9 @@ import '../../../shell/presentation/pages/main_shell.dart';
 import '../../domain/usecases/is_onboarding_completed_use_case.dart';
 import '../bloc/auth_session/auth_session_bloc.dart';
 import '../bloc/auth_session/auth_session_state.dart';
+import '../bloc/onboarding/onboarding_bloc.dart';
+import '../bloc/onboarding/onboarding_event.dart';
+import '../bloc/onboarding/onboarding_state.dart';
 import 'login_page.dart';
 import 'onboarding_page.dart';
 
@@ -34,56 +37,73 @@ class _SplashPageState extends State<SplashPage> {
     _startRouting();
   }
 
-  Future<void> _startRouting() async {
-    await Future<void>.delayed(const Duration(milliseconds: 1500));
+Future<void> _startRouting() async {
+  await Future<void>.delayed(const Duration(milliseconds: 1500));
+
+  if (!mounted) return;
+
+  try {
+    // 1. Request onboarding status from OnboardingBloc.
+    final onboardingBloc = context.read<OnboardingBloc>();
+
+    onboardingBloc.add(const OnboardingStatusRequested());
+
+    final onboardingState = await onboardingBloc.stream
+        .firstWhere(
+          (state) =>
+              state is OnboardingCompleted ||
+              state is OnboardingNotCompleted ||
+              state is OnboardingError,
+        )
+        .timeout(const Duration(seconds: 15));
 
     if (!mounted) return;
 
-    try {
-      // 1. Check whether onboarding was completed.
-      final onboardingCompleted = await getIt<IsOnboardingCompletedUseCase>()();
-
-      if (!mounted) return;
-
-      if (!onboardingCompleted) {
-        _navigateTo(const OnboardingPage());
-        return;
-      }
-
-      // 2. Read the current authentication session.
-      final sessionBloc = context.read<AuthSessionBloc>();
-      final currentState = sessionBloc.state;
-
-      final AuthSessionState sessionState;
-
-      if (currentState is AuthSessionAuthenticated ||
-          currentState is AuthSessionUnauthenticated ||
-          currentState is AuthSessionError) {
-        sessionState = currentState;
-      } else {
-        sessionState = await sessionBloc.stream
-            .firstWhere(
-              (state) =>
-                  state is AuthSessionAuthenticated ||
-                  state is AuthSessionUnauthenticated ||
-                  state is AuthSessionError,
-            )
-            .timeout(const Duration(seconds: 15));
-      }
-
-      if (!mounted) return;
-
-      if (sessionState is AuthSessionAuthenticated) {
-        _navigateTo(const MainShell());
-      } else if (sessionState is AuthSessionUnauthenticated) {
-        _navigateTo(const LoginPage());
-      } else if (sessionState is AuthSessionError) {
-        throw Exception(sessionState.message);
-      }
-    } catch (e) {
-      print(e);
+    // 2. If onboarding is not completed, show onboarding page.
+    if (onboardingState is OnboardingNotCompleted) {
+      _navigateTo(const OnboardingPage());
+      return;
     }
+
+    // 3. If checking onboarding failed, stop routing.
+    if (onboardingState is OnboardingError) {
+      throw Exception(onboardingState.message);
+    }
+
+    // 4. Read the current authentication session.
+    final sessionBloc = context.read<AuthSessionBloc>();
+    final currentState = sessionBloc.state;
+
+    final AuthSessionState sessionState;
+
+    if (currentState is AuthSessionAuthenticated ||
+        currentState is AuthSessionUnauthenticated ||
+        currentState is AuthSessionError) {
+      sessionState = currentState;
+    } else {
+      sessionState = await sessionBloc.stream
+          .firstWhere(
+            (state) =>
+                state is AuthSessionAuthenticated ||
+                state is AuthSessionUnauthenticated ||
+                state is AuthSessionError,
+          )
+          .timeout(const Duration(seconds: 15));
+    }
+
+    if (!mounted) return;
+
+    if (sessionState is AuthSessionAuthenticated) {
+      _navigateTo(const MainShell());
+    } else if (sessionState is AuthSessionUnauthenticated) {
+      _navigateTo(const LoginPage());
+    } else if (sessionState is AuthSessionError) {
+      throw Exception(sessionState.message);
+    }
+  } catch (e) {
+    debugPrint('Splash routing error: $e');
   }
+}
 
   void _navigateTo(Widget page) {
     Navigator.of(

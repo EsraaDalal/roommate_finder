@@ -15,6 +15,7 @@ import 'core/resources/app_theme.dart';
 import 'core/resources/theme_controller.dart';
 import 'core/services/push_notification_service.dart';
 import 'features/auth/presentation/bloc/auth_session/auth_session_event.dart';
+import 'features/auth/presentation/bloc/onboarding/onboarding_bloc.dart';
 import 'features/auth/presentation/pages/splash_page.dart';
 import 'features/favorites/presentation/bloc/favorite_bloc.dart';
 import 'features/notifications/presentation/bloc/notification_bloc.dart';
@@ -65,6 +66,9 @@ class RoommateFinderApp extends StatelessWidget {
             BlocProvider<FavoritesBloc>(create: (_) => getIt<FavoritesBloc>()),
             BlocProvider<NotificationBloc>(
               create: (_) => getIt<NotificationBloc>(),
+            ),
+             BlocProvider<OnboardingBloc>(
+              create: (_) => getIt<OnboardingBloc>(),
             ),
           ],
           child: MaterialApp(
