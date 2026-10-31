@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:rommate_finder/core/config/di.dart';
+
 
 import '../../../../core/resources/app_colors.dart';
 import '../../../../core/resources/app_spacing.dart';
 import '../../../../core/widgets/app_brand_mark.dart';
-import '../../domain/usecases/complete_onboarding_use_case.dart';
+
 import '../bloc/onboarding/onboarding_bloc.dart';
 import '../bloc/onboarding/onboarding_event.dart';
 import '../bloc/onboarding/onboarding_state.dart';
